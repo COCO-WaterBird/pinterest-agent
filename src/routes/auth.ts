@@ -41,8 +41,13 @@ authRouter.get('/callback', async (req, res) => {
   }
 
   try {
+    const useSandbox = process.env.PINTEREST_USE_SANDBOX === 'true';
+    const tokenUrl = useSandbox
+      ? 'https://api-sandbox.pinterest.com/v5/oauth/token'
+      : 'https://api.pinterest.com/v5/oauth/token';
+
     const tokenResponse = await axios.post(
-      'https://api.pinterest.com/v5/oauth/token',
+      tokenUrl,
       new URLSearchParams({
         grant_type: 'authorization_code',
         code,
@@ -67,7 +72,11 @@ authRouter.get('/callback', async (req, res) => {
     const tokensPath = path.join(process.cwd(), 'tokens.json');
     await writeFile(tokensPath, JSON.stringify(tokens, null, 2), 'utf-8');
 
-    return res.send('Token saved to tokens.json');
+    return res.send(
+      useSandbox
+        ? 'Token saved to tokens.json (Sandbox). You can now run: npm run post-pins -- --auto-board'
+        : 'Token saved to tokens.json'
+    );
   } catch (error: any) {
     const message = error?.response?.data ?? error?.message ?? 'Unknown error';
     console.error('Error exchanging Pinterest token', message);

@@ -5,7 +5,11 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "boards": "ts-node src/agent/post-pins.ts boards",
+    "post-pins": "ts-node src/agent/post-pins.ts post",
+    "sections": "ts-node src/agent/post-pins.ts sections",
+    "schedule": "ts-node src/agent/schedule.ts"
   },
   "keywords": [],
   "author": "",
@@ -14,7 +18,8 @@
   "dependencies": {
     "axios": "^1.13.6",
     "dotenv": "^17.3.1",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "node-cron": "^3.0.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
