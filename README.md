@@ -36,7 +36,7 @@ PINTEREST_USE_SANDBOX=true
 OPENAI_API_KEY=sk-...
 
 # Optional – used by the scheduler (see below)
-# PIN_BOARD_ID=1119144644842442822
+# PIN_BOARD_ID=BoardID
 # PIN_SCHEDULE_CRON=0 9 * * *
 # PIN_SCHEDULE_AI_FIELDS=true
 # PIN_SCHEDULE_RUN_NOW=true
@@ -96,7 +96,7 @@ This calls Pinterest `GET /v5/boards` and prints:
 
 ```text
 ----------------------------------------
-  1119...6615  Modern Kitchen Cabinets
+  BoardID  Modern Kitchen Cabinets
   ...
 ----------------------------------------
 ```
@@ -142,7 +142,7 @@ Optional arguments (after `--`):
 Example:
 
 ```bash
-npm run post-pins -- --board=1119144644842396615 --dir=./my-photos --title="My photo" --description="The Cabination"
+npm run post-pins -- --board=BoardID --dir=./my-photos --title="My photo" --description="The Cabination"
 ```
 
 ---
@@ -240,7 +240,7 @@ Your board (e.g. **“Modern Kitchen Cabinets”**) can have multiple sections s
 ### 6.1 List sections for a board
 
 ```bash
-npm run sections -- --board=1119144644842396615
+npm run sections -- --board=BoardID
 ```
 
 This calls `GET /boards/{board_id}/sections` and prints each section’s ID and name.
@@ -251,13 +251,13 @@ This calls `GET /boards/{board_id}/sections` and prints each section’s ID and 
 
 ```bash
 # send to “Navy Blue Kitchen Cabinets”
-npm run post-pins -- --board=1119144644842396615 --section-hint="Navy Blue" --ai-fields
+npm run post-pins -- --board=BoardID --section-hint="Navy Blue" --ai-fields
 ```
 
 **By section ID:**
 
 ```bash
-npm run post-pins -- --board=1119144644842396615 --section=SECTION_ID --ai-fields
+npm run post-pins -- --board=BoardID --section=SectionID --ai-fields
 ```
 
 If `--section` / `--section-hint` is omitted, Pins go to the board root.
@@ -302,7 +302,7 @@ You can run the agent on a schedule using **node-cron**.
 ### 8.1 Configure schedule in `.env`
 
 ```bash
-PIN_BOARD_ID=1119144644842442822      # board to post to
+PIN_BOARD_ID=BoardID                  # board to post to
 PIN_SCHEDULE_CRON=0 9 * * *          # default: every day at 09:00 (min hour day month weekday)
 PIN_SCHEDULE_AI_FIELDS=true          # use AI-generated copy
 # PIN_SCHEDULE_RUN_NOW=true          # optional: run once immediately at startup (for testing)
@@ -343,7 +343,7 @@ If you prefer OS‑level cron instead of `npm run schedule`:
 ```bash
 crontab -e
 # Add a line (change the path to your project):
-# 0 9 * * * cd /Users/zhangke/Documents/GitHub/Pinterest-agent && npm run post-pins -- --board=1119144644842442822 --ai-fields
+# 0 9 * * * cd /path/to/Pinterest-agent && npm run post-pins -- --board=BoardID --ai-fields
 ```
 
 ### 8.4 Scheduling with GitHub Actions (production-style, free)
