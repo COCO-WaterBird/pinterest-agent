@@ -1,0 +1,4 @@
+# 定时发 Pin 用的图片目录（与 assets/to-post 行为一致）：
+# - 把待发图放本目录（或子目录 to-post/ 亦可）
+# - 发成功后自动移到 posted/，失败移到 failed/
+# 格式：.jpg / .jpeg / .png。会随仓库提交，供 GitHub Actions 读取。

@@ -1,0 +1,48 @@
+# Scheduled Pinterest Pin posting (production-style, free, resume-friendly)
+# Runs on cron and can be triggered manually. Uses GitHub Secrets for credentials.
+name: Schedule Pinterest Pins
+
+on:
+  schedule:
+    # 早 9 点到晚 7 点，每 1 小时发 1 张（PT：9–19 共 11 次 → UTC 17–23,0–3）
+    - cron: '0 0,1,2,3,17,18,19,20,21,22,23 * * *'
+  workflow_dispatch:
+    # Allow manual "Run workflow" from GitHub Actions tab
+
+jobs:
+  post-pins:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create .env from secrets
+        run: |
+          cat << 'EOF' > .env
+          PINTEREST_CLIENT_ID=${{ secrets.PINTEREST_CLIENT_ID }}
+          PINTEREST_CLIENT_SECRET=${{ secrets.PINTEREST_CLIENT_SECRET }}
+          PINTEREST_REDIRECT_URI=${{ secrets.PINTEREST_REDIRECT_URI }}
+          PORT=3000
+          PINTEREST_USE_SANDBOX=${{ secrets.PINTEREST_USE_SANDBOX }}
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          EOF
+
+      - name: Create tokens.json from secret
+        env:
+          PINTEREST_TOKENS_JSON: ${{ secrets.PINTEREST_TOKENS_JSON }}
+        run: echo "$PINTEREST_TOKENS_JSON" > tokens.json
+
+      - name: Run post-pins
+        run: |
+          npm run post-pins -- --board=${{ secrets.PIN_BOARD_ID }} --ai-fields --dir=./schedule-images --max=1
+        env:
+          NODE_ENV: production

@@ -346,6 +346,28 @@ crontab -e
 # 0 9 * * * cd /Users/zhangke/Documents/GitHub/Pinterest-agent && npm run post-pins -- --board=1119144644842442822 --ai-fields
 ```
 
+### 8.4 Scheduling with GitHub Actions (production-style, free)
+
+You can run scheduled Pin posting **without a server** using GitHub Actions. The workflow runs on GitHub’s runners and uses **Secrets** for credentials.
+
+1. **Add repository Secrets** (Settings → Secrets and variables → Actions):
+
+   | Secret name | Description |
+   |-------------|-------------|
+   | `PINTEREST_CLIENT_ID` | Same as in `.env` |
+   | `PINTEREST_CLIENT_SECRET` | Same as in `.env` |
+   | `PINTEREST_REDIRECT_URI` | e.g. `http://localhost:3000/pinterest/callback` (can be dummy in CI) |
+   | `PINTEREST_USE_SANDBOX` | `true` or leave empty for production |
+   | `OPENAI_API_KEY` | Your OpenAI API key |
+   | `PIN_BOARD_ID` | Board ID to post to |
+   | `PINTEREST_TOKENS_JSON` | **Full contents** of your local `tokens.json` (copy-paste the whole JSON) |
+
+2. **Images for the scheduled run**: put images in the `schedule-images/` folder and **commit** them. The workflow uses `--dir=./schedule-images`. Supported: `.jpg`, `.jpeg`, `.png`. (The workflow does not move files in CI; add or rotate images as needed.)
+
+3. **Schedule**: the workflow runs **daily at 09:00 UTC** by default. You can change the cron in `.github/workflows/schedule-pins.yml` (e.g. `0 1 * * *` for 09:00 CST). You can also trigger a run manually: Actions → “Schedule Pinterest Pins” → “Run workflow”.
+
+4. **First run**: ensure you have at least one image in `schedule-images/` and that `PINTEREST_TOKENS_JSON` is the exact JSON from your working `tokens.json` (from the OAuth flow). If the token expires, re-run OAuth locally and update the secret.
+
 ---
 
 ## 9. Commands reference

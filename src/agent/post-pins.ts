@@ -90,12 +90,21 @@ async function imagePathToMedia(filePath: string): Promise<PinMedia> {
   return { source_type: 'image_base64', content_type: contentType, data };
 }
 
-/** 发成功后移到 assets/posted，失败移到 assets/failed；目标目录不存在会先创建 */
-async function moveToAssets(srcPath: string, kind: 'posted' | 'failed'): Promise<void> {
-  const dir = kind === 'posted' ? ASSETS_POSTED : ASSETS_FAILED;
+/** 根据图片所在目录决定目标：在 assets/to-post 则用 assets/posted|failed，否则用 该目录/posted|failed（如 schedule-images/posted） */
+function getMoveTargetDir(srcPath: string, kind: 'posted' | 'failed'): string {
+  const imageDir = path.dirname(srcPath);
+  const isDefaultToPost = path.normalize(imageDir) === path.normalize(DEFAULT_IMAGE_DIR);
+  if (isDefaultToPost) return kind === 'posted' ? ASSETS_POSTED : ASSETS_FAILED;
+  return path.join(imageDir, kind);
+}
+
+/** 发成功后移到 posted，失败移到 failed；目标目录不存在会先创建 */
+async function moveToAssets(srcPath: string, kind: 'posted' | 'failed'): Promise<string> {
+  const dir = getMoveTargetDir(srcPath, kind);
   await mkdir(dir, { recursive: true });
   const dest = path.join(dir, path.basename(srcPath));
   await rename(srcPath, dest);
+  return dest;
 }
 
 /** 加载长尾关键词清单：优先 keywords.txt（每行一个），否则 .env 的 PIN_KEYWORDS（逗号分隔） */
@@ -191,13 +200,13 @@ async function main() {
               ...(item.alt ? { alt_text: truncate(item.alt, MAX_ALT) } : {}),
               media,
             });
-            await moveToAssets(absPath, 'posted');
-            console.log(`[${i + 1}/${toPublish.length}] 已发布: ${pin.id}  → assets/posted`);
+            const postedDest = await moveToAssets(absPath, 'posted');
+            console.log(`[${i + 1}/${toPublish.length}] 已发布: ${pin.id}  → ${path.relative(process.cwd(), postedDest)}`);
           } catch (err: unknown) {
             console.error(`[${i + 1}/${toPublish.length}] 失败 ${item.imagePath}: ${getErrorMessage(err)}`);
             try {
-              await moveToAssets(absPath, 'failed');
-              console.log(`  已移至 assets/failed`);
+              const failedDest = await moveToAssets(absPath, 'failed');
+              console.log(`  已移至 ${path.relative(process.cwd(), failedDest)}`);
             } catch {
               // 移动失败不中断
             }
@@ -221,6 +230,7 @@ async function main() {
     const previewMode = args.includes('--preview');
     const dirArg = args.find((a) => a.startsWith('--dir='))?.slice(6);
     const fileArg = args.find((a) => a.startsWith('--image='))?.slice(8);
+    const maxArg = args.find((a) => a.startsWith('--max='))?.slice(6);
     const titleArg = args.find((a) => a.startsWith('--title='))?.slice(8);
     const descArg = args.find((a) => a.startsWith('--description='))?.slice(14);
     const previewOutArg = args.find((a) => a.startsWith('--preview-out='))?.slice(14);
@@ -237,6 +247,8 @@ async function main() {
         .filter((e) => e.isFile() && isImageFile(e.name))
         .map((e) => path.join(dir, e.name));
     }
+    const maxCount = maxArg ? Math.max(1, parseInt(maxArg, 10) || 1) : undefined;
+    if (maxCount !== undefined) imagePaths = imagePaths.slice(0, maxCount);
 
     if (imagePaths.length === 0) {
       console.error('未找到图片。请把 .jpg/.jpeg/.png 放到 assets/to-post 或使用 --dir=目录 / --image=路径');
@@ -367,13 +379,13 @@ async function main() {
           ...(altText ? { alt_text: altText } : {}),
           media,
         });
-        await moveToAssets(filePath, 'posted');
-        console.log(`[${i + 1}/${imagePaths.length}] 已发布: ${pin.id}  → assets/posted`);
+        const postedDest = await moveToAssets(filePath, 'posted');
+        console.log(`[${i + 1}/${imagePaths.length}] 已发布: ${pin.id}  → ${path.relative(process.cwd(), postedDest)}`);
       } catch (err: unknown) {
         console.error(`[${i + 1}/${imagePaths.length}] 失败 ${filePath}: ${getErrorMessage(err)}`);
         try {
-          await moveToAssets(filePath, 'failed');
-          console.log(`  已移至 assets/failed`);
+          const failedDest = await moveToAssets(filePath, 'failed');
+          console.log(`  已移至 ${path.relative(process.cwd(), failedDest)}`);
         } catch {
           // 移动失败不中断
         }
@@ -427,8 +439,9 @@ async function main() {
     AI 会在标题/描述/alt 中自然融入这些词
 
   可选:
-    --dir=目录路径           图片目录，默认 ./images
+    --dir=目录路径           图片目录，默认 assets/to-post
     --image=单张图片路径     只发这一张
+    --max=N                 本次最多发 N 张（定时任务可 --max=1）
     --title=标题            非 AI 时的默认标题
     --description=描述      非 AI 时的默认描述
 
