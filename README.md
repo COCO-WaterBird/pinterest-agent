@@ -1,240 +1,368 @@
-# Pinterest Agent — 自动化发 Pin
+## Pinterest Agent – Auto post Pins
 
-用本地图片自动发布到 Pinterest 画板。适合已有图片、想批量发 Pin 的场景。
+This project is a small agent that **automatically publishes Pins to Pinterest** from local images.
+It is designed for workflows where you already have product / lifestyle images on disk and want to:
 
-## 前置条件
+- Generate SEO‑friendly titles, descriptions, tags, and alt text with OpenAI
+- Choose the right board (and board section) automatically
+- Post in bulk or on a schedule
 
-- 已配置 `.env`（`PINTEREST_CLIENT_ID`、`PINTEREST_CLIENT_SECRET`、`PINTEREST_REDIRECT_URI`）
-- 已完成一次 OAuth 登录，项目根目录下有 `tokens.json`
+> **Note**: All API keys and tokens must be stored only in `.env` (ignored by git).  
+> Do **not** commit secrets to GitHub.
 
-## 一步步操作（自动化发 Pin）
+---
 
-### 第一步：安装依赖
+## 1. Prerequisites
+
+- Node.js 18+ and npm
+- A Pinterest app (v5 API) with scopes:
+  - `boards:read`, `boards:write`, `pins:read`, `pins:write`
+- A Pinterest account that has at least one board (and optional sections)
+- An OpenAI API key (for AI‑generated copy)
+
+### 1.1 Environment variables (`.env`)
+
+Create a `.env` file in the project root:
+
+```bash
+PINTEREST_CLIENT_ID=...
+PINTEREST_CLIENT_SECRET=...
+PINTEREST_REDIRECT_URI=http://localhost:3000/pinterest/callback
+PORT=3000
+
+# Trial apps must use sandbox; once your app is approved you can set this to false or remove it.
+PINTEREST_USE_SANDBOX=true
+
+OPENAI_API_KEY=sk-...
+
+# Optional – used by the scheduler (see below)
+# PIN_BOARD_ID=1119144644842442822
+# PIN_SCHEDULE_CRON=0 9 * * *
+# PIN_SCHEDULE_AI_FIELDS=true
+# PIN_SCHEDULE_RUN_NOW=true
+```
+
+`.gitignore` already excludes `.env`, `tokens.json`, and `assets/*`, so secrets will not be pushed to GitHub.
+
+---
+
+## 2. Project setup
+
+### 2.1 Install dependencies
 
 ```bash
 npm install
 ```
 
-**说明**：`npm install` 会根据 `package.json` 里的 `dependencies` 和 `devDependencies` 安装所有依赖，并写入 `node_modules`。以后跑 `npm run xxx` 或 `npx ts-node` 都会用到这些包。
+This installs runtime deps (`axios`, `express`, `dotenv`, `node-cron`) and TypeScript tooling.
+
+### 2.2 Run the OAuth flow (one‑time, or when tokens expire)
+
+1. **Start the local server**:
+
+   ```bash
+   npm run dev
+   ```
+
+2. In your browser, open:
+
+   ```text
+   http://localhost:3000/pinterest/login
+   ```
+
+   You will be redirected to Pinterest to grant access, and then back to
+   `PINTEREST_REDIRECT_URI` (e.g. `http://localhost:3000/pinterest/callback`).
+
+3. If everything is correct you will see:
+
+   > `Token saved to tokens.json (Sandbox)...`
+
+   A `tokens.json` file will be created in the project root and used by the agent
+   for authenticated Pinterest API calls.
+
+You can now stop `npm run dev` or leave it running while you experiment.
 
 ---
 
-### 第二步：拿到 Pinterest 授权（若还没做过）
+## 3. Basic workflow – post Pins from local images
 
-1. 启动本地服务：
-
-```bash
-npm run dev
-```
-
-**说明**：`npm run dev` 执行的是 `ts-node-dev --respawn --transpile-only src/index.ts`。即用 `ts-node-dev` 直接跑 TypeScript，不先编译；`--respawn` 表示改代码后自动重启；`--transpile-only` 只做转译不做类型检查，启动更快。
-
-2. 浏览器打开：
-
-```
-http://localhost:3000/pinterest/login
-```
-
-**说明**：这会跳转到 Pinterest 授权页，你授权后会被重定向到 `PINTEREST_REDIRECT_URI`（如 `http://localhost:3000/pinterest/callback`），服务端用回调里的 `code` 换 `access_token` 并写入 `tokens.json`。之后发 API 请求都会用这个 token。
-
-3. 看到 “Token saved to tokens.json” 后，可以关掉 `npm run dev`（或另开一个终端做下面步骤）。
-
----
-
-### 第三步：列出画板，拿到 board_id
-
-在项目根目录执行：
+### 3.1 List your boards (get `board_id`)
 
 ```bash
 npm run boards
 ```
 
-**说明**：`npm run boards` 会执行 `ts-node src/agent/post-pins.ts boards`。即用 `ts-node` 直接运行 TypeScript 脚本，脚本里会读 `tokens.json` 的 `access_token`，调用 Pinterest API `GET /v5/boards` 拉取你账号下的画板列表并打印。发 Pin 时必须指定要发到哪个画板，所以需要从这里记下要用的 `board_id`（第一列）。
+This calls Pinterest `GET /v5/boards` and prints:
 
----
+```text
+----------------------------------------
+  1119...6615  Modern Kitchen Cabinets
+  ...
+----------------------------------------
+```
 
-### 第四步：准备图片
+Copy the ID of the board you want to post to.
 
-把要发的图片放到 **`assets/to-post`** 目录（若不存在请先创建：`mkdir -p assets/to-post`）；或用 `--dir=...` 指定其他目录。支持 `.jpg`、`.jpeg`、`.png`。
+### 3.2 Prepare images
 
-**说明**：脚本会扫描目录下这些扩展名的文件，读成 base64 后通过 Pinterest API 上传。发**成功**的图会移到 `assets/posted`，**失败**的会移到 `assets/failed`（目录不存在时会自动创建）。
+Place images you want to post into:
 
----
+```text
+assets/to-post
+```
 
-### 第五步：发 Pin
+Supported formats: `.jpg`, `.jpeg`, `.png`.
 
-在项目根目录执行（把 `BOARD_ID` 换成第三步拿到的画板 ID）：
+When the agent runs:
+
+- **Success** → image is moved to `assets/posted`
+- **Failure** → image is moved to `assets/failed`
+
+You can also override the directory per run with `--dir=...`.
+
+### 3.3 Post Pins to a board
 
 ```bash
 npm run post-pins -- --board=BOARD_ID
 ```
 
-默认会从 **`assets/to-post`** 读图并依次发布；成功后图片移至 `assets/posted`，失败移至 `assets/failed`。
+Default behaviour:
 
-可选参数（都写在 `--` 后面）：
+- Reads all images from `assets/to-post`
+- Posts each as a new Pin on the given board
+- Uses a simple default title/description if AI is not enabled
 
-- `--dir=目录路径`：图片所在目录，默认 `assets/to-post`
-- `--image=单张图片路径`：只发这一张
-- `--title=标题`
-- `--description=描述`
+Optional arguments (after `--`):
 
-示例：
+- `--dir=PATH` – image directory (default `assets/to-post`)
+- `--image=PATH` – post a single image instead of a directory
+- `--title=TEXT` – default title when not using AI
+- `--description=TEXT` – default description when not using AI
+
+Example:
 
 ```bash
-npm run post-pins -- --board=123456789 --dir=./my-photos --title="我的图" --description="描述"
+npm run post-pins -- --board=1119144644842396615 --dir=./my-photos --title="My photo" --description="The Cabination"
 ```
 
 ---
 
-## 根据图片/名称自动选画板
+## 4. Smarter board + section selection
 
-不必每次手填 `--board=ID`，可以用下面三种方式让脚本自己决定发到哪个画板。
+### 4.1 Choose board by name
 
-### 方式一：按「画板名称关键词」匹配（无需额外配置）
-
-用 `--board-hint=关键词`，脚本会在你账号的画板列表里找**名称或描述包含该词**的画板（不区分中英文、大小写），用第一个匹配的。
+Instead of hard‑coding `--board=ID`, you can let the agent match by board name:
 
 ```bash
-npm run post-pins -- --board-hint=旅行 --dir=./images
+npm run post-pins -- --board-hint="Kitchen" --dir=./assets/to-post
 ```
 
-若画板名是「旅行 / Travel」或描述里含「旅行」，就会自动选它。
+This searches your boards for one whose **name or description contains** “Kitchen”
+and uses the first match.
 
-### 方式二：用「目录名」当关键词（同上，更省事）
-
-把图片放在**以画板名命名的子目录**下，不写 `--board-hint` 也会用目录名去匹配画板。
-
-例如画板叫「美食」，可以：
+You can also let the directory name act as the hint:
 
 ```bash
-mkdir -p images/美食
-# 把图片放进 images/美食/
-npm run post-pins -- --dir=./images/美食
+mkdir -p assets/to-post/Modern
+# put images into assets/to-post/Modern
+npm run post-pins -- --dir=./assets/to-post/Modern
 ```
 
-脚本会用目录名 `美食` 去匹配画板名称，等同于 `--board-hint=美食`。
+The folder name `Modern` is used as the board hint.
 
-### 方式三：根据图片内容用 AI 选画板（需 OpenAI）
+### 4.2 Choose board by image content (AI – `--auto-board`)
 
-若希望**每张图按内容**自动发到最相关的画板，可加 `--auto-board`。脚本会用 OpenAI Vision 分析每张图，得到 1～3 个英文类别词（如 travel、food、fashion），再按这些词匹配画板名称；匹配不到则发到你的第一个画板。
-
-1. 在 `.env` 里配置 OpenAI API Key：
+If you want the agent to pick a board based on the image content:
 
 ```bash
-OPENAI_API_KEY=sk-...
+OPENAI_API_KEY=sk-...   # in .env
+
+npm run post-pins -- --auto-board --dir=./assets/to-post
 ```
 
-2. 执行：
+For each image, the agent:
 
-```bash
-npm run post-pins -- --auto-board --dir=./images
-```
+1. Calls OpenAI Vision (`gpt-4o-mini`) with the image
+2. Gets a category word (`travel`, `food`, `kitchen`, …)
+3. Matches that category against your board names/descriptions
+4. Posts the Pin to the first matching board (or a fallback board)
 
-**说明**：会为每张图调一次 OpenAI（模型 `gpt-4o-mini`），产生少量费用；未配置 `OPENAI_API_KEY` 时用 `--auto-board` 会报错并提示改用 `--board` 或 `--board-hint`。
+This costs one OpenAI API call **per image**.
 
 ---
 
-## AI 文案规则（--auto-board / --ai-fields）
+## 5. AI‑generated copy (titles, descriptions, tags, alt)
 
-使用 OpenAI 生成文案时，会遵循以下规则（针对品牌 **The Cabination**）：
+When you pass `--auto-board` or `--ai-fields`, the agent uses OpenAI to generate:
 
-- **标题**：格式为 `[风格] + [布局] + [功能] + [用途]`，例如 *"Modern Minimalist Wall Mounted Cabinet with Soft-Close Doors for Kitchen Storage"*，并尽量包含长尾关键词。
-- **描述**：必须包含品牌名 **The Cabination**，并自然融入长尾关键词（如 small space storage solutions、apartment organization）。
-- **Alt**：无障碍描述中也会尽量使用长尾关键词。
-- **标签**：4～8 个长尾或具体关键词，会以 `#tag` 形式拼进描述末尾。
+- **Title** – in the format  
+  **[Style] + [Layout] + [Function] + [Use]**  
+  e.g. `Modern Minimalist Wall Mounted Cabinet with Soft-Close Doors for Kitchen Storage`
+- **Description** – must include the brand name **“The Cabination”** and use
+  long‑tail keywords where natural
+- **Tags** – 4–8 long‑tail or specific keywords
+- **Alt text** – accessibility description that also uses relevant long‑tail keywords
 
-### 人工参与审核（推荐，符合 Pinterest 政策）
-
-希望「人选图、看一遍/改一遍文案再发」时，用**两步**：
-
-1. **生成预览（不发布）**：用 `--preview` 让 AI 生成每条 Pin 的文案并写入 `pin-preview.json`，不发到 Pinterest。
-2. **编辑预览文件**：打开 `pin-preview.json`，按需改 title/description/alt，或对不想发的条目加上 `"skip": true`。
-3. **按预览发布**：执行 `npm run post-pins -- --from-preview`，只会上传预览文件中未标记 skip 的条目。
+### 5.1 Use AI only for copy (board fixed)
 
 ```bash
-# 第一步：生成预览
-npm run post-pins -- --auto-board --preview --dir=./images
-
-# 第二步：编辑项目根目录下的 pin-preview.json
-
-# 第三步：发布
-npm run post-pins -- --from-preview
+npm run post-pins -- --board=BOARD_ID --ai-fields --dir=./assets/to-post
 ```
+
+Board is fixed; AI generates title/description/tags/alt for each image.
+
+### 5.2 Long‑tail keyword list (optional, for SEO)
+
+You can give the model a list of preferred long‑tail keywords:
+
+- Create `keywords.txt` in the project root (see `keywords.txt.example`), one keyword per line,
+  lines starting with `#` are comments.
+- Or set in `.env`:
+
+  ```bash
+  PIN_KEYWORDS=small space storage,apartment organization,modern kitchen cabinet
+  ```
+
+When present, the model will **prefer** to use these phrases naturally in title,
+description, and alt text.
 
 ---
 
-### 长尾关键词清单（可选）
+## 6. Boards with sections (sub‑boards)
 
-**建议建立清单**，便于 SEO 一致性和品牌聚焦：
+Your board (e.g. **“Modern Kitchen Cabinets”**) can have multiple sections such as:
 
-- **方式一**：在项目根目录创建 `keywords.txt`，每行一个长尾关键词，`#` 开头为注释。示例见 `keywords.txt.example`，复制为 `keywords.txt` 后按需修改。
-- **方式二**：在 `.env` 中配置 `PIN_KEYWORDS=词1,词2,词3`。
+- Modern Oak Kitchen Ideas  
+- Modern Gray Kitchen Cabinet Ideas  
+- Kitchen Decor Ideas – White  
+- Navy Blue Kitchen Cabinets  
 
-有清单时，AI 会在标题、描述、alt 中**优先自然融入**这些词；没有清单时，AI 仍会根据图片内容生成长尾表述，但不会统一围绕你指定的关键词。
+### 6.1 List sections for a board
 
 ```bash
-# 使用关键词清单发 Pin（清单可选）
-npm run post-pins -- --auto-board --dir=./images
-# 或指定画板 + 仅 AI 文案
-npm run post-pins -- --board-hint=cabinet --ai-fields --dir=./images
+npm run sections -- --board=1119144644842396615
 ```
+
+This calls `GET /boards/{board_id}/sections` and prints each section’s ID and name.
+
+### 6.2 Post Pins into a specific section
+
+**By section name:**
+
+```bash
+# send to “Navy Blue Kitchen Cabinets”
+npm run post-pins -- --board=1119144644842396615 --section-hint="Navy Blue" --ai-fields
+```
+
+**By section ID:**
+
+```bash
+npm run post-pins -- --board=1119144644842396615 --section=SECTION_ID --ai-fields
+```
+
+If `--section` / `--section-hint` is omitted, Pins go to the board root.
 
 ---
 
-## 定时发 Pin
+## 7. Human‑in‑the‑loop review (recommended)
 
-在固定时间自动执行发 Pin（例如每天 9:00 发 `assets/to-post` 里的图）。
+Pinterest’s policies prefer that users **actively review Pins** before publishing.
+You can use a 2‑step flow:
 
-### 1. 配置 .env
+1. **Generate preview only (no publishing)**:
 
-在 `.env` 中增加（或取消注释）：
+   ```bash
+   npm run post-pins -- --board=BOARD_ID --ai-fields --preview --dir=./assets/to-post
+   ```
+
+   This creates a `pin-preview.json` with all images and AI‑generated copy, but does
+   **not** call the Pinterest API.
+
+2. **Edit the preview file**:
+
+   - Change `title`, `description`, `alt`, or `tags`
+   - Set `"skip": true` on items you do not want to publish
+
+3. **Publish from the preview**:
+
+   ```bash
+   npm run post-pins -- --from-preview
+   # or specify a custom file:
+   # npm run post-pins -- --from-preview=my-preview.json
+   ```
+
+Only non‑skipped items will be posted.
+
+---
+
+## 8. Scheduling Pins
+
+You can run the agent on a schedule using **node-cron**.
+
+### 8.1 Configure schedule in `.env`
 
 ```bash
-PIN_BOARD_ID=1119144644842442822      # 必填，发到哪个画板
-PIN_SCHEDULE_CRON=0 9 * * *          # 默认每天 9:00（分 时 日 月 周）
-PIN_SCHEDULE_AI_FIELDS=true          # 为 true 时使用 AI 生成标题/描述/alt
-# PIN_SCHEDULE_RUN_NOW=true          # 可选：启动时先执行一次（测试用）
+PIN_BOARD_ID=1119144644842442822      # board to post to
+PIN_SCHEDULE_CRON=0 9 * * *          # default: every day at 09:00 (min hour day month weekday)
+PIN_SCHEDULE_AI_FIELDS=true          # use AI-generated copy
+# PIN_SCHEDULE_RUN_NOW=true          # optional: run once immediately at startup (for testing)
 ```
 
-**cron 格式**（分 时 日 月 周）：
+Common cron examples:
 
-- `0 9 * * *` — 每天 9:00
-- `0 9,15 * * *` — 每天 9:00 和 15:00
-- `30 8 * * 1-5` — 工作日 8:30
+- `0 9 * * *` – every day at 09:00
+- `0 9,15 * * *` – every day at 09:00 and 15:00
+- `30 8 * * 1-5` – weekdays at 08:30
 
-### 2. 安装依赖并启动调度
+### 8.2 Start the scheduler
 
 ```bash
-npm install
+npm install         # if not already
 npm run schedule
 ```
 
-进程会常驻，到点自动执行 `post-pins --board=... --ai-fields`。若要后台运行可配合 `nohup npm run schedule &` 或 pm2。
+This starts `src/agent/schedule.ts`, which:
 
-### 3. 系统 crontab（可选）
+- Reads the cron expression and board ID from `.env`
+- At each scheduled time, runs:
 
-不用常驻进程时，可用系统定时任务（在项目根目录执行）：
+  ```bash
+  npm run post-pins -- --board=$PIN_BOARD_ID [--ai-fields]
+  ```
+
+You can keep this running in a terminal, or daemonize it:
+
+```bash
+nohup npm run schedule > schedule.log 2>&1 &
+```
+
+### 8.3 System crontab (alternative)
+
+If you prefer OS‑level cron instead of `npm run schedule`:
 
 ```bash
 crontab -e
-# 添加一行（每天 9:00，请把路径改成你的项目路径）：
-# 0 9 * * * cd /path/to/Pinterest-agent && npm run post-pins -- --board=1119144644842442822 --ai-fields
+# Add a line (change the path to your project):
+# 0 9 * * * cd /Users/zhangke/Documents/GitHub/Pinterest-agent && npm run post-pins -- --board=1119144644842442822 --ai-fields
 ```
 
 ---
 
-## 小结：命令与作用
+## 9. Commands reference
 
-| 命令 | 作用 |
-|------|------|
-| `npm install` | 安装依赖到 `node_modules` |
-| `npm run dev` | 启动 Express，用于 OAuth 登录并写入 `tokens.json` |
-| `npm run boards` | 列出画板，拿到 `board_id` |
-| `npm run post-pins -- --board=ID [--dir=...]` | 用本地图片向指定画板发 Pin |
-| `npm run post-pins -- --board-hint=关键词` | 按画板名称匹配，自动选画板 |
-| `npm run post-pins -- --auto-board` | 根据图片内容用 AI 选画板（需 `OPENAI_API_KEY`） |
+| Command | Description |
+|--------|-------------|
+| `npm install` | Install project dependencies |
+| `npm run dev` | Start the Express server for OAuth (`/pinterest/login`) |
+| `npm run boards` | List boards and their `board_id` |
+| `npm run sections -- --board=ID` | List sections for a board (use with `--section` / `--section-hint`) |
+| `npm run post-pins -- --board=ID [--dir=...]` | Post local images to a specific board |
+| `npm run post-pins -- --board-hint=keyword` | Auto‑select board by name/description |
+| `npm run post-pins -- --auto-board` | Select board based on image content (OpenAI Vision) |
+| `npm run post-pins -- --board=ID --ai-fields` | Fixed board, AI‑generated title/description/tags/alt |
+| `npm run post-pins -- --preview` / `--from-preview` | Two‑step human review flow |
+| `npm run schedule` | Run scheduled posting based on `PIN_SCHEDULE_CRON` |
 
-| `npm run post-pins -- --from-preview` | 按预览文件发布（审核后发） |
-| `npm run schedule` | 启动定时发 Pin（需配置 PIN_BOARD_ID、PIN_SCHEDULE_CRON） |
+With the pieces above you can go from **raw local images** to **SEO‑optimized Pinterest Pins**
+on the right boards and sections, manually, in bulk, or on a schedule.
 
-按顺序做完「安装 → 登录拿到 token → boards 拿 board_id → 放图到 assets/to-post → post-pins」就可以实现自动化发 Pinterest Pin。需要「根据图片自己判断发到哪个 board」时，用 `--board-hint` / 目录名 或 `--auto-board` 即可。需要定时发时配置 `.env` 后运行 `npm run schedule`。
