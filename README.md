@@ -9,6 +9,8 @@ It is designed for workflows where you already have product / lifestyle images o
 
 > **Note**: All API keys and tokens must be stored only in `.env` (ignored by git).  
 > Do **not** commit secrets to GitHub.
+>
+> This project only provides tooling code. When using the Pinterest API, OpenAI API, or any other third‑party services, you must comply with their official terms of service and usage policies.
 
 ---
 
