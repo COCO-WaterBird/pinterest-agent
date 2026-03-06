@@ -30,10 +30,22 @@ export interface PinMeta {
   alt: string;
 }
 
+/** 写作角度：用于增加标题/描述的多样性，每张图可随机或指定一种 */
+export const PIN_ANGLES = [
+  'lifestyle & mood',           // 生活方式、氛围感
+  'features & specs',           // 功能、规格
+  'problem-solution',           // 痛点 + 解决
+  'scene & setting',            // 场景、空间
+  'before-after or transformation', // 对比、变化
+  'tips & how-to',              // 技巧、用法
+] as const;
+
 /** 调用 getPinMeta 时的可选配置 */
 export interface GetPinMetaOptions {
   /** 长尾关键词清单：AI 会优先在 title/description/alt 中自然融入这些词（用于 SEO） */
   keywordList?: string[];
+  /** 本张图的写作角度，不传则随机选一个，用于增加多样性 */
+  angle?: (typeof PIN_ANGLES)[number];
 }
 
 /**
@@ -59,6 +71,10 @@ export async function getPinMeta(
       ? `\nLong-tail keyword list to incorporate where relevant (use naturally in title, description, and alt): ${(options.keywordList ?? []).join(', ')}`
       : '';
 
+  const angle =
+    options.angle ??
+    PIN_ANGLES[Math.floor(Math.random() * PIN_ANGLES.length)];
+
   const prompt = `You are creating a Pinterest pin for this image. Brand: ${BRAND}.
 
 Reply with a JSON object only, no other text. Use this exact structure:
@@ -71,15 +87,16 @@ Reply with a JSON object only, no other text. Use this exact structure:
 }
 
 Rules:
-1. Title MUST follow this format: [风格 Style] + [布局 Layout] + [功能 Function] + [用途 Use]. Example: "Modern Minimalist Wall Mounted Cabinet with Soft-Close Doors for Kitchen Storage". Use long-tail phrases, under 100 chars.
-2. Description MUST mention the brand "${BRAND}" and describe the image. Use long-tail keywords naturally (e.g. "small space storage solutions", "best cabinet for narrow hallway"). Under 500 chars. Can include hashtags at the end.
-3. Alt: accessibility description, also use long-tail keywords where natural. Under 400 chars.
-4. Tags: 4-8 long-tail or specific keywords, no # in strings (e.g. "compact storage cabinet", "apartment organization").
+1. Title: VARY your approach. This pin's angle is "${angle}". So write the title in a way that fits that angle—e.g. for "lifestyle & mood" use feeling/atmosphere; for "problem-solution" lead with a problem or benefit; for "tips & how-to" use a how-to or tip; for "features & specs" use [Style]+[Layout]+[Function]+[Use]. Keep under 100 chars, use long-tail phrases, and make it distinct from a generic product title.
+2. Description MUST mention the brand "${BRAND}" and describe the image. Vary sentence structure and opening (sometimes start with a question, sometimes a benefit, sometimes the scene). Use long-tail keywords naturally. Under 500 chars. Can include hashtags at the end.
+3. Alt: accessibility description, use long-tail keywords where natural. Under 400 chars.
+4. Tags: 4-8 long-tail or specific keywords, no # in strings. Vary tags (mix product, scene, and lifestyle terms) so not every pin has the same tag set.
 5. Prefer English for SEO. Use long-tail keywords in title, description, and alt whenever they fit the image.${keywordHint}`;
 
   const body = {
     model: 'gpt-4o-mini',
     max_tokens: 400,
+    temperature: 0.85,
     response_format: { type: 'json_object' as const },
     messages: [
       {
