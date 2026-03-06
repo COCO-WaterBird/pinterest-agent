@@ -12,6 +12,8 @@ on:
 jobs:
   post-pins:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # 允许把「已发图移到 posted」的改动推回仓库，避免下次重复发
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -46,3 +48,10 @@ jobs:
           npm run post-pins -- --board=${{ secrets.PIN_BOARD_ID }} --ai-fields --dir=./schedule-images --max=1
         env:
           NODE_ENV: production
+
+      - name: Commit moved images (avoid re-posting next run)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add schedule-images/
+          git diff --staged --quiet || (git commit -m "chore(schedule): move posted image to schedule-images/posted" && git push)
