@@ -1,12 +1,12 @@
 /**
- * 自动化发 Pinterest Pin 的入口脚本
+ * Entry script for posting Pinterest Pins.
  *
- * 用法：
- *   1. 列出画板：npm run boards
- *   2. 发 Pin：  npm run post-pins -- --board=BOARD_ID --dir=./images
- *   3. 预览后发布（人工参与）：--preview 生成预览文件 → 编辑 → --from-preview 发布
+ * Usage:
+ *   1. List boards: npm run boards
+ *   2. Post Pins:  npm run post-pins -- --board=BOARD_ID --dir=./images
+ *   3. Preview then publish: --preview → edit file → --from-preview
  *
- * 环境：需先完成 OAuth（访问 /pinterest/login），保证项目根目录有 tokens.json
+ * Requires OAuth first (visit /pinterest/login); tokens.json in project root.
  */
 import { readFile, readdir, writeFile, rename, mkdir } from 'fs/promises';
 import path from 'path';
@@ -29,11 +29,11 @@ const ASSETS_POSTED = path.join(ASSETS_DIR, 'posted');
 const ASSETS_FAILED = path.join(ASSETS_DIR, 'failed');
 const DEFAULT_PREVIEW_FILE = path.join(process.cwd(), 'pin-preview.json');
 
-/** 预览文件中的一条：人工可编辑文案，或设 skip: true 不发布该项 */
+/** One item in preview file; edit copy or set skip: true to skip publishing */
 export interface PinPreviewItem {
   imagePath: string;
   boardId: string;
-  /** 可选：发到该画板下的 section（分区）ID */
+  /** Optional: section ID under the board */
   boardSectionId?: string;
   title: string;
   description: string;
@@ -42,7 +42,7 @@ export interface PinPreviewItem {
   skip?: boolean;
 }
 
-/** Pinterest 字段长度限制 */
+/** Pinterest field length limits */
 const MAX_TITLE = 100;
 const MAX_DESCRIPTION = 800;
 const MAX_ALT = 400;
@@ -52,7 +52,7 @@ function truncate(s: string, max: number): string {
   return s.slice(0, max - 1).trim();
 }
 
-/** 把 AI 返回的 tags 转成 description 末尾的 hashtag 串 */
+/** Append AI tags as hashtags to description */
 function descriptionWithHashtags(description: string, tags: string[]): string {
   const clean = description.trim();
   const hashPart = tags
@@ -71,7 +71,7 @@ function isAxiosError(e: unknown): e is { response?: { status?: number; data?: u
   return typeof e === 'object' && e !== null && 'response' in e;
 }
 
-/** 从错误中取出可读信息（含 Pinterest API 返回的 message） */
+/** Extract readable message from error (including Pinterest API message) */
 function getErrorMessage(err: unknown): string {
   if (isAxiosError(err) && err.response?.data) {
     const d = err.response.data as Record<string, unknown>;
@@ -81,7 +81,7 @@ function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** 把本地图片读成 base64，并判断 content_type */
+/** Read local image as base64 and set content_type */
 async function imagePathToMedia(filePath: string): Promise<PinMedia> {
   const ext = path.extname(filePath).toLowerCase();
   const contentType =
@@ -90,7 +90,7 @@ async function imagePathToMedia(filePath: string): Promise<PinMedia> {
   return { source_type: 'image_base64', content_type: contentType, data };
 }
 
-/** 根据图片所在目录决定目标：在 assets/to-post 则用 assets/posted|failed，否则用 该目录/posted|failed（如 schedule-images/posted） */
+/** Target dir: assets/posted|failed if from assets/to-post, else <image-dir>/posted|failed */
 function getMoveTargetDir(srcPath: string, kind: 'posted' | 'failed'): string {
   const imageDir = path.dirname(srcPath);
   const isDefaultToPost = path.normalize(imageDir) === path.normalize(DEFAULT_IMAGE_DIR);
@@ -98,7 +98,7 @@ function getMoveTargetDir(srcPath: string, kind: 'posted' | 'failed'): string {
   return path.join(imageDir, kind);
 }
 
-/** 发成功后移到 posted，失败移到 failed；目标目录不存在会先创建 */
+/** Move file to posted or failed dir; create dir if needed */
 async function moveToAssets(srcPath: string, kind: 'posted' | 'failed'): Promise<string> {
   const dir = getMoveTargetDir(srcPath, kind);
   await mkdir(dir, { recursive: true });
@@ -107,7 +107,7 @@ async function moveToAssets(srcPath: string, kind: 'posted' | 'failed'): Promise
   return dest;
 }
 
-/** 加载长尾关键词清单：优先 keywords.txt（每行一个），否则 .env 的 PIN_KEYWORDS（逗号分隔） */
+/** Load keyword list: keywords.txt (one per line) or .env PIN_KEYWORDS (comma-separated) */
 async function loadKeywordList(): Promise<string[]> {
   const fromEnv = process.env.PIN_KEYWORDS?.trim();
   if (fromEnv) {
@@ -133,14 +133,13 @@ async function main() {
   const client = createPinterestClient(accessToken);
 
   if (command === 'boards') {
-    // 子命令：列出所有画板，方便用户复制 board_id
-    console.log('正在获取你的画板列表...\n');
+    console.log('Fetching your boards...\n');
     const res = await getBoards(client);
     if (!res.items?.length) {
-      console.log('当前没有画板，请先在 Pinterest 网页上创建至少一个画板。');
+      console.log('No boards found. Create at least one board on pinterest.com first.');
       return;
     }
-    console.log('画板列表（发 Pin 时用 --board=ID）：');
+    console.log('Boards (use --board=ID when posting):');
     console.log('----------------------------------------');
     for (const b of res.items) {
       console.log(`  ${b.id}  ${b.name}`);
@@ -152,17 +151,17 @@ async function main() {
   if (command === 'sections') {
     const boardIdArg = args.find((a) => a.startsWith('--board='))?.slice(8);
     if (!boardIdArg) {
-      console.error('请指定画板 ID，例如: npm run post-pins -- sections --board=1119144644842396615');
+      console.error('Specify board ID, e.g. npm run post-pins -- sections --board=1119144644842396615');
       process.exit(1);
     }
-    console.log(`正在获取画板 ${boardIdArg} 下的 sections...\n`);
+    console.log(`Fetching sections for board ${boardIdArg}...\n`);
     const res = await getBoardSections(client, boardIdArg, 100);
     const list = res.items ?? [];
     if (!list.length) {
-      console.log('该画板下没有 section，或 API 未返回。');
+      console.log('No sections for this board, or API returned none.');
       return;
     }
-    console.log('Section 列表（发 Pin 时用 --section=ID 或 --section-hint=名称）：');
+    console.log('Sections (use --section=ID or --section-hint=name when posting):');
     console.log('----------------------------------------');
     for (const s of list) {
       console.log(`  ${s.id}  ${s.name}`);
@@ -172,22 +171,20 @@ async function main() {
   }
 
   if (command === 'post') {
-    // 子命令：从目录或单文件发 Pin（或从预览文件发布）
     const fromPreviewArg = args.find((a) => a.startsWith('--from-preview'))?.split('=')[1];
     const fromPreview = args.includes('--from-preview') || fromPreviewArg !== undefined;
     const previewFilePath = fromPreviewArg ?? DEFAULT_PREVIEW_FILE;
 
     if (fromPreview) {
-      // 从预览文件发布：只读 JSON，不调 AI，逐条 createPin
       try {
         const raw = await readFile(previewFilePath, 'utf-8');
         const items = JSON.parse(raw) as PinPreviewItem[];
         if (!Array.isArray(items) || items.length === 0) {
-          console.error('预览文件为空或格式错误，需为 JSON 数组。');
+          console.error('Preview file empty or invalid; must be a JSON array.');
           process.exit(1);
         }
         const toPublish = items.filter((item) => !item.skip);
-        console.log(`从 ${previewFilePath} 读取 ${items.length} 条，其中 ${toPublish.length} 条将发布。\n`);
+        console.log(`Read ${items.length} items from ${previewFilePath}, ${toPublish.length} to publish.\n`);
         for (const [i, item] of toPublish.entries()) {
           const absPath = path.resolve(process.cwd(), item.imagePath);
           try {
@@ -201,21 +198,21 @@ async function main() {
               media,
             });
             const postedDest = await moveToAssets(absPath, 'posted');
-            console.log(`[${i + 1}/${toPublish.length}] 已发布: ${pin.id}  → ${path.relative(process.cwd(), postedDest)}`);
+            console.log(`[${i + 1}/${toPublish.length}] Published: ${pin.id}  → ${path.relative(process.cwd(), postedDest)}`);
           } catch (err: unknown) {
-            console.error(`[${i + 1}/${toPublish.length}] 失败 ${item.imagePath}: ${getErrorMessage(err)}`);
+            console.error(`[${i + 1}/${toPublish.length}] Failed ${item.imagePath}: ${getErrorMessage(err)}`);
             try {
               const failedDest = await moveToAssets(absPath, 'failed');
-              console.log(`  已移至 ${path.relative(process.cwd(), failedDest)}`);
+              console.log(`  Moved to ${path.relative(process.cwd(), failedDest)}`);
             } catch {
-              // 移动失败不中断
+              // ignore move failure
             }
           }
         }
-        console.log('\n完成。');
+        console.log('\nDone.');
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error(`读取预览文件失败: ${msg}`);
+        console.error(`Failed to read preview file: ${msg}`);
         process.exit(1);
       }
       return;
@@ -251,37 +248,35 @@ async function main() {
     if (maxCount !== undefined) imagePaths = imagePaths.slice(0, maxCount);
 
     if (imagePaths.length === 0) {
-      console.error('未找到图片。请把 .jpg/.jpeg/.png 放到 assets/to-post 或使用 --dir=目录 / --image=路径');
+      console.error('No images found. Put .jpg/.jpeg/.png in assets/to-post or use --dir=path / --image=path');
       process.exit(1);
     }
 
-    // 解析要发到哪个画板：--board > --board-hint / 目录名 > --auto-board
     let resolvedBoardId: string | null = boardIdArg ?? null;
 
     if (!resolvedBoardId && !autoBoard) {
       const hint = boardHintArg ?? (dirArg ? path.basename(path.resolve(process.cwd(), dirArg)) : null);
       if (hint) {
         resolvedBoardId = await findBoardIdByHint(client, hint);
-        if (resolvedBoardId) console.log(`根据关键词「${hint}」匹配到画板 ID: ${resolvedBoardId}\n`);
+        if (resolvedBoardId) console.log(`Matched board ID for "${hint}": ${resolvedBoardId}\n`);
       }
     }
 
     if (!resolvedBoardId && !autoBoard) {
-      console.error('请指定画板：--board=ID 或 --board-hint=画板名称关键词');
-      console.error('也可把图片放在以画板名命名的目录下，如 images/旅行');
-      console.error('或使用 --auto-board 根据图片内容自动选画板（需配置 OPENAI_API_KEY）');
+      console.error('Specify board: --board=ID or --board-hint=keyword');
+      console.error('Or put images in a folder named after the board (e.g. images/travel)');
+      console.error('Or use --auto-board to pick board by image content (requires OPENAI_API_KEY)');
       process.exit(1);
     }
 
-    // 解析发到画板下的哪个 section（仅当未用 --auto-board 时有效）
     let resolvedSectionId: string | null = sectionArg ?? null;
     if (!resolvedSectionId && sectionHintArg && resolvedBoardId) {
       resolvedSectionId = await findSectionIdByHint(client, resolvedBoardId, sectionHintArg);
-      if (resolvedSectionId) console.log(`根据 section 关键词「${sectionHintArg}」匹配到: ${resolvedSectionId}\n`);
+      if (resolvedSectionId) console.log(`Matched section for "${sectionHintArg}": ${resolvedSectionId}\n`);
     }
 
     if (previewMode && !autoBoard && !aiFields) {
-      console.error('--preview 需与 --auto-board 或 --ai-fields 一起使用，才能生成可审核的文案。');
+      console.error('--preview must be used with --auto-board or --ai-fields to generate copy.');
       process.exit(1);
     }
 
@@ -289,13 +284,11 @@ async function main() {
     const defaultDesc = descArg ?? '';
     const useAiForFields = autoBoard || aiFields;
 
-    // 使用 AI 文案时加载长尾关键词清单（可选）
     const keywordList = useAiForFields ? await loadKeywordList() : [];
     if (useAiForFields && keywordList.length > 0) {
-      console.log(`已加载 ${keywordList.length} 个长尾关键词，将融入标题/描述/alt。\n`);
+      console.log(`Loaded ${keywordList.length} long-tail keywords for title/description/alt.\n`);
     }
 
-    // --auto-board 时没有默认画板，每张图单独匹配；否则用统一画板
     const boardsRes = autoBoard ? await getBoards(client, 100) : null;
     const fallbackBoardId = boardsRes?.items?.[0]?.id ?? null;
 
@@ -304,12 +297,12 @@ async function main() {
 
     console.log(
       previewMode
-        ? `已开启 --preview，将生成预览文件（不发布）。共 ${imagePaths.length} 张。\n`
+        ? `--preview on: generating preview file (no publish). ${imagePaths.length} image(s).\n`
         : autoBoard
-          ? `已开启 --auto-board，将用 OpenAI 选画板并生成标题/描述/标签/alt。共 ${imagePaths.length} 张。\n`
+          ? `--auto-board on: OpenAI picks board and generates title/description/tags/alt. ${imagePaths.length} image(s).\n`
           : useAiForFields
-            ? `已开启 --ai-fields，将用 OpenAI 生成每张 Pin 的标题/描述/标签/alt。共 ${imagePaths.length} 张。\n`
-            : `将向画板 ${resolvedBoardId} 发送 ${imagePaths.length} 张图片。\n`
+            ? `--ai-fields on: OpenAI generates title/description/tags/alt per Pin. ${imagePaths.length} image(s).\n`
+            : `Posting ${imagePaths.length} image(s) to board ${resolvedBoardId}.\n`
     );
 
     let currentTags: string[] = [];
@@ -329,7 +322,7 @@ async function main() {
           meta = await getPinMeta(filePath, { keywordList });
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[${i + 1}/${imagePaths.length}] OpenAI 分析失败，跳过 ${name}: ${msg}`);
+          console.error(`[${i + 1}/${imagePaths.length}] OpenAI analysis failed, skipping ${name}: ${msg}`);
           continue;
         }
         title = truncate(meta.title, MAX_TITLE);
@@ -341,11 +334,11 @@ async function main() {
           const found = await findBoardIdByHint(client, meta.category);
           boardId = found ?? fallbackBoardId ?? '';
           if (!boardId) {
-            console.error(`[${i + 1}/${imagePaths.length}] 无法匹配画板且账号无画板，跳过: ${name}`);
-            console.error('  请先运行 npm run boards 查看画板；若为空，请到 pinterest.com 创建至少一个画板后再试。');
+            console.error(`[${i + 1}/${imagePaths.length}] No matching board and account has no boards, skipping: ${name}`);
+            console.error('  Run npm run boards to list boards; create at least one on pinterest.com if empty.');
             continue;
           }
-          if (!found) console.log(`[${i + 1}] 类别: ${meta.category} → 使用默认画板`);
+          if (!found) console.log(`[${i + 1}] Category: ${meta.category} → using default board`);
         } else {
           boardId = resolvedBoardId as string;
         }
@@ -365,7 +358,7 @@ async function main() {
           alt: altText ?? '',
           tags: currentTags,
         });
-        console.log(`[${i + 1}/${imagePaths.length}] 已生成预览: ${name}`);
+        console.log(`[${i + 1}/${imagePaths.length}] Preview generated: ${name}`);
         continue;
       }
 
@@ -380,79 +373,74 @@ async function main() {
           media,
         });
         const postedDest = await moveToAssets(filePath, 'posted');
-        console.log(`[${i + 1}/${imagePaths.length}] 已发布: ${pin.id}  → ${path.relative(process.cwd(), postedDest)}`);
+        console.log(`[${i + 1}/${imagePaths.length}] Published: ${pin.id}  → ${path.relative(process.cwd(), postedDest)}`);
       } catch (err: unknown) {
-        console.error(`[${i + 1}/${imagePaths.length}] 失败 ${filePath}: ${getErrorMessage(err)}`);
+        console.error(`[${i + 1}/${imagePaths.length}] Failed ${filePath}: ${getErrorMessage(err)}`);
         try {
           const failedDest = await moveToAssets(filePath, 'failed');
-          console.log(`  已移至 ${path.relative(process.cwd(), failedDest)}`);
+          console.log(`  Moved to ${path.relative(process.cwd(), failedDest)}`);
         } catch {
-          // 移动失败不中断
+          // ignore move failure
         }
       }
     }
 
     if (previewMode) {
       await writeFile(outPath, JSON.stringify(previewItems, null, 2), 'utf-8');
-      console.log(`\n预览已写入: ${outPath}`);
-      console.log('请编辑该文件：修改文案或对不需要发布的条目加上 "skip": true，然后执行：');
+      console.log(`\nPreview written to ${outPath}`);
+      console.log('Edit the file (change copy or add "skip": true), then run:');
       console.log('  npm run post-pins -- --from-preview');
-      console.log('  或指定文件：npm run post-pins -- --from-preview=你的预览文件.json');
+      console.log('  or: npm run post-pins -- --from-preview=your-preview.json');
       return;
     }
 
-    console.log('\n完成。');
+    console.log('\nDone.');
     return;
   }
 
-  // 未识别的子命令，打印用法
   console.log(`
-用法:
-  boards                    列出画板，获取 board_id
-  sections --board=ID       列出该画板下的 sections（分区），发 Pin 时可指定 --section=ID
-                            示例: npm run sections -- --board=1119144644842396615
-  post                      发 Pin（需指定画板方式见下）
+Usage:
+  boards                     List boards, get board_id
+  sections --board=ID        List sections for board; use --section=ID or --section-hint=name when posting
+                            e.g. npm run sections -- --board=1119144644842396615
+  post                       Post Pins (specify board as below)
 
-  指定画板（三选一）:
-    --board=ID               直接指定画板 ID
-    --board-hint=关键词      按画板名称匹配（如 旅行、food）
-    把图片放在 目录名=画板名 下，如 images/旅行 会自动匹配名称含「旅行」的画板
-    --auto-board             用 OpenAI 根据图片选画板，并生成 title/description/tags/alt（需 OPENAI_API_KEY）
+  Board (pick one):
+    --board=ID               Board ID
+    --board-hint=keyword     Match board by name (e.g. travel, food). Or put images in folder named after board (e.g. images/travel)
+    --auto-board             OpenAI picks board and generates title/description/tags/alt (requires OPENAI_API_KEY)
 
-  指定 section（分区，可选）:
-    --section=ID             发到该画板下的指定 section（先运行 sections --board=ID 查看 ID）
-    --section-hint=名称      按 section 名称匹配（如 "Modern Gray"、"Navy Blue"）
+  Section (optional):
+    --section=ID             Post to this section (run sections --board=ID to see IDs)
+    --section-hint=name      Match section by name (e.g. "Modern Gray", "Navy Blue")
 
-  AI 生成文案（需 OPENAI_API_KEY）:
-    --auto-board             选画板 + 生成标题、描述、标签、alt
-    --ai-fields              画板仍用 --board/--board-hint，仅用 AI 生成标题、描述、标签、alt
+  AI copy (requires OPENAI_API_KEY):
+    --auto-board             Pick board + generate title, description, tags, alt
+    --ai-fields              Board from --board/--board-hint; AI generates title, description, tags, alt only
 
-  人工参与审核（符合 Pinterest 政策）:
-    --preview                只生成预览文件，不发布（需与 --auto-board 或 --ai-fields 同用）
-    --preview-out=文件路径   预览文件路径，默认 pin-preview.json
-    --from-preview           按预览文件发布（可编辑文案、对条目加 "skip": true 不发布）
-    --from-preview=文件路径  指定预览文件，默认 pin-preview.json
+  Human review (Pinterest-friendly):
+    --preview                Generate preview file only (use with --auto-board or --ai-fields)
+    --preview-out=path       Preview file path, default pin-preview.json
+    --from-preview           Publish from preview (edit copy or add "skip": true)
+    --from-preview=path      Custom preview file
 
-  长尾关键词（可选，用于 SEO）:
-    项目根目录 keywords.txt   每行一个关键词，# 为注释
-    或 .env 中 PIN_KEYWORDS=词1,词2,词3
-    AI 会在标题/描述/alt 中自然融入这些词
+  Long-tail keywords (optional, SEO):
+    keywords.txt in project root, one per line (# = comment), or .env PIN_KEYWORDS=word1,word2,word3
 
-  可选:
-    --dir=目录路径           图片目录，默认 assets/to-post
-    --image=单张图片路径     只发这一张
-    --max=N                 本次最多发 N 张（定时任务可 --max=1）
-    --title=标题            非 AI 时的默认标题
-    --description=描述      非 AI 时的默认描述
+  Options:
+    --dir=path               Image directory, default assets/to-post
+    --image=path             Single image
+    --max=N                  Max images this run (e.g. --max=1 for cron)
+    --title=text             Default title when not using AI
+    --description=text       Default description when not using AI
 
-示例:
+Examples:
   npm run boards
   npm run sections -- --board=1119144644842396615
-  npm run post-pins -- --board=1119144644842396615 --section-hint="Navy Blue" --ai-fields
-  npm run post-pins -- --board-hint=旅行 --dir=./images
+  npm run post-pins -- --board=ID --section-hint="Navy Blue" --ai-fields
+  npm run post-pins -- --board-hint=travel --dir=./images
   npm run post-pins -- --auto-board --dir=./photos
   npm run post-pins -- --board=ID --ai-fields --dir=./images
-  # 先预览，编辑 pin-preview.json 后再发布
   npm run post-pins -- --auto-board --preview --dir=./images
   npm run post-pins -- --from-preview
 `);

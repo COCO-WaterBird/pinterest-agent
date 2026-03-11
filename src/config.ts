@@ -4,7 +4,7 @@ import path from 'path';
 
 dotenv.config();
 
-/** 从 .env 读到的环境变量 */
+/** Environment variables read from .env */
 export function getEnv() {
   const clientId = process.env.PINTEREST_CLIENT_ID;
   const clientSecret = process.env.PINTEREST_CLIENT_SECRET;
@@ -13,7 +13,7 @@ export function getEnv() {
 
   if (!clientId || !clientSecret || !redirectUri) {
     throw new Error(
-      '缺少环境变量：请在 .env 中配置 PINTEREST_CLIENT_ID, PINTEREST_CLIENT_SECRET, PINTEREST_REDIRECT_URI'
+      'Missing env vars: set PINTEREST_CLIENT_ID, PINTEREST_CLIENT_SECRET, PINTEREST_REDIRECT_URI in .env'
     );
   }
 
@@ -25,7 +25,7 @@ export function getEnv() {
   };
 }
 
-/** 存 OAuth 后拿到的 token 的结构（与 routes/auth 写入的格式一致） */
+/** OAuth token shape (matches what routes/auth writes) */
 export interface PinterestTokens {
   access_token: string;
   refresh_token?: string;
@@ -33,20 +33,20 @@ export interface PinterestTokens {
   obtained_at?: string;
 }
 
-/** 从 tokens.json 读取 access_token（发 API 请求时必须） */
+/** Read access_token from tokens.json (required for API calls) */
 export async function getAccessToken(): Promise<string> {
   const tokensPath = path.join(process.cwd(), 'tokens.json');
   try {
     const raw = await readFile(tokensPath, 'utf-8');
     const tokens = JSON.parse(raw) as PinterestTokens;
     if (!tokens.access_token) {
-      throw new Error('tokens.json 中没有 access_token');
+      throw new Error('tokens.json has no access_token');
     }
     return tokens.access_token;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     throw new Error(
-      `无法读取 token，请先完成 OAuth 登录（访问 /pinterest/login）。错误: ${msg}`
+      `Could not read token; complete OAuth first (visit /pinterest/login). Error: ${msg}`
     );
   }
 }

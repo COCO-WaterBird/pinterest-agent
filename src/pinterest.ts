@@ -3,12 +3,12 @@ import axios, { AxiosInstance } from 'axios';
 const API_BASE = 'https://api.pinterest.com/v5';
 const API_SANDBOX_BASE = 'https://api-sandbox.pinterest.com/v5';
 
-/** 试用应用需用 Sandbox，在 .env 中设 PINTEREST_USE_SANDBOX=true */
+/** Trial apps use Sandbox; set PINTEREST_USE_SANDBOX=true in .env */
 function getApiBase(): string {
   return process.env.PINTEREST_USE_SANDBOX === 'true' ? API_SANDBOX_BASE : API_BASE;
 }
 
-/** 创建带 Bearer token 的 HTTP 客户端，后续所有请求都会带这个 token */
+/** Create HTTP client with Bearer token for all requests */
 export function createPinterestClient(accessToken: string): AxiosInstance {
   return axios.create({
     baseURL: getApiBase(),
@@ -19,22 +19,22 @@ export function createPinterestClient(accessToken: string): AxiosInstance {
   });
 }
 
-/** 你的一个画板（board） */
+/** A board */
 export interface Board {
   id: string;
   name: string;
   description?: string;
 }
 
-/** 分页结果（Pinterest API 常用 cursor 分页） */
+/** Paginated boards response (Pinterest API uses cursor pagination) */
 export interface BoardsResponse {
   items: Board[];
   bookmark?: string;
 }
 
 /**
- * 获取当前账号下的画板列表（发 Pin 时必须指定发到哪个 board_id）
- * 使用 API: GET /boards
+ * List boards for the current account (required to choose board_id when posting)
+ * API: GET /boards
  */
 export async function getBoards(
   client: AxiosInstance,
@@ -47,8 +47,8 @@ export async function getBoards(
 }
 
 /**
- * 根据「画板名称关键词」自动选画板（不区分中英文、大小写）
- * 例如 hint="旅行" 或 "travel" 会匹配名称里包含该词的画板
+ * Find a board by name/description hint (case-insensitive)
+ * e.g. hint="travel" matches a board whose name or description contains "travel"
  */
 export async function findBoardIdByHint(
   client: AxiosInstance,
@@ -66,21 +66,21 @@ export async function findBoardIdByHint(
   return found ? found.id : null;
 }
 
-/** 画板下的一个 section（分区） */
+/** A section under a board */
 export interface BoardSection {
   id: string;
   name: string;
 }
 
-/** 画板 sections 列表 */
+/** Paginated board sections response */
 export interface BoardSectionsResponse {
   items: BoardSection[];
   bookmark?: string;
 }
 
 /**
- * 获取某画板下的所有 section（分区）
- * 使用 API: GET /boards/{board_id}/sections
+ * List sections for a board
+ * API: GET /boards/{board_id}/sections
  */
 export async function getBoardSections(
   client: AxiosInstance,
@@ -95,7 +95,7 @@ export async function getBoardSections(
 }
 
 /**
- * 根据 section 名称关键词匹配该画板下的某个 section
+ * Find a section by name hint within a board
  */
 export async function findSectionIdByHint(
   client: AxiosInstance,
@@ -110,24 +110,24 @@ export async function findSectionIdByHint(
   return found ? found.id : null;
 }
 
-/** 创建 Pin 时用的媒体：二选一 —— 公网图片 URL，或 base64 */
+/** Pin media: either image URL or base64 */
 export type PinMedia =
   | { source_type: 'image_url'; url: string }
   | { source_type: 'image_base64'; content_type: 'image/jpeg' | 'image/png'; data: string };
 
 export interface CreatePinParams {
   board_id: string;
-  /** 可选：发到该画板下的某个 section（分区） */
+  /** Optional: post to this section under the board */
   board_section_id?: string;
   title: string;
   description?: string;
-  /** 无障碍描述，Pinterest 限制 500 字符 */
+  /** Alt text; Pinterest limit 500 chars */
   alt_text?: string;
   link?: string;
   media: PinMedia;
 }
 
-/** 创建 Pin 后 API 返回的 Pin 信息 */
+/** Pin returned by API after create */
 export interface Pin {
   id: string;
   link?: string;
@@ -137,9 +137,9 @@ export interface Pin {
 }
 
 /**
- * 发一张 Pin 到指定画板
- * 使用 API: POST /pins
- * media 可以是公网 image_url，或本地图片转成的 image_base64（无需图床）
+ * Create a Pin on the given board
+ * API: POST /pins
+ * media can be image_url or image_base64 (no external host needed)
  */
 export async function createPin(
   client: AxiosInstance,

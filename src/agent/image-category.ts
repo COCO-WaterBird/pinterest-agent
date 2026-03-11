@@ -1,7 +1,6 @@
 /**
- * 用 OpenAI Vision 根据图片内容生成：发到哪个画板(category)、标题、描述、标签、alt
- * 需在 .env 中配置 OPENAI_API_KEY
- * 可选：长尾关键词清单 keywords.txt 或 .env PIN_KEYWORDS，用于 SEO
+ * Use OpenAI Vision to generate: category (board), title, description, tags, alt from image.
+ * Set OPENAI_API_KEY in .env. Optional: keywords.txt or PIN_KEYWORDS in .env for SEO.
  */
 import { readFile } from 'fs/promises';
 import path from 'path';
@@ -16,50 +15,47 @@ function getDataUrl(filePath: string, base64: string): string {
   return `data:${mime};base64,${base64}`;
 }
 
-/** 一张图对应的一条 Pin 的完整元数据（由 AI 生成） */
+/** Pin metadata for one image (AI-generated) */
 export interface PinMeta {
-  /** 英文类别词，用于匹配画板名，如 travel, food, fashion */
+  /** English category word for board matching, e.g. travel, food, fashion */
   category: string;
-  /** Pin 标题，建议 100 字以内 */
+  /** Pin title, under 100 chars */
   title: string;
-  /** Pin 描述，建议 500 字以内，可含 hashtag */
+  /** Pin description, under 500 chars, may include hashtags */
   description: string;
-  /** 标签关键词，发 Pin 时会转成 #tag 拼进 description */
+  /** Tags; appended as #tag in description */
   tags: string[];
-  /** 无障碍描述，建议 500 字以内 */
+  /** Alt text, under 500 chars */
   alt: string;
 }
 
-/** 写作角度：用于增加标题/描述的多样性，每张图可随机或指定一种 */
+/** Writing angles for variety; one chosen per image (random or passed) */
 export const PIN_ANGLES = [
-  'lifestyle & mood',           // 生活方式、氛围感
-  'features & specs',           // 功能、规格
-  'problem-solution',           // 痛点 + 解决
-  'scene & setting',            // 场景、空间
-  'before-after or transformation', // 对比、变化
-  'tips & how-to',              // 技巧、用法
+  'lifestyle & mood',
+  'features & specs',
+  'problem-solution',
+  'scene & setting',
+  'before-after or transformation',
+  'tips & how-to',
 ] as const;
 
-/** 调用 getPinMeta 时的可选配置 */
 export interface GetPinMetaOptions {
-  /** 长尾关键词清单：AI 会优先在 title/description/alt 中自然融入这些词（用于 SEO） */
+  /** Long-tail keywords to weave into title/description/alt (SEO) */
   keywordList?: string[];
-  /** 本张图的写作角度，不传则随机选一个，用于增加多样性 */
+  /** Angle for this image; if omitted, one is chosen at random */
   angle?: (typeof PIN_ANGLES)[number];
 }
 
 /**
- * 分析图片内容，返回发到哪个画板 + 标题、描述、标签、alt（一条 OpenAI 调用）
- * 标题格式：[风格] + [布局] + [功能] + [用途]；描述必须含品牌 The Cabination；尽量用长尾关键词
+ * Analyze image and return category + title, description, tags, alt (one OpenAI call).
+ * Title varies by angle; description must mention brand and use long-tail keywords.
  */
 export async function getPinMeta(
   imagePath: string,
   options: GetPinMetaOptions = {}
 ): Promise<PinMeta> {
   if (!OPENAI_API_KEY) {
-    throw new Error(
-      '未配置 OPENAI_API_KEY。请在 .env 中添加 OPENAI_API_KEY'
-    );
+    throw new Error('OPENAI_API_KEY not set; add it to .env');
   }
 
   const buf = await readFile(imagePath);
@@ -133,7 +129,7 @@ Rules:
       try {
         parsed = JSON.parse(raw);
       } catch {
-        throw new Error(`OpenAI 返回的不是合法 JSON: ${raw.slice(0, 200)}`);
+        throw new Error(`OpenAI response is not valid JSON: ${raw.slice(0, 200)}`);
       }
 
       const o = parsed as Record<string, unknown>;
@@ -156,11 +152,11 @@ Rules:
     break;
   }
 
-  throw new Error(`OpenAI API 错误: ${lastRes?.status ?? 'unknown'} ${lastErr}`);
+  throw new Error(`OpenAI API error: ${lastRes?.status ?? 'unknown'} ${lastErr}`);
 }
 
 /**
- * 仅返回类别词（用于只做画板匹配、不生成标题描述时；内部仍调 getPinMeta 取 category）
+ * Return only category (for board matching without full copy; still calls getPinMeta for category).
  */
 export async function getImageCategory(imagePath: string): Promise<string> {
   const meta = await getPinMeta(imagePath);
