@@ -5,7 +5,7 @@
  *   PIN_BOARD_ID=board_id          Required, target board to post to
  *   PIN_SCHEDULE_CRON=0 9 * * *   Cron expression, default daily at 09:00 (min hour day month dow)
  *   PIN_SCHEDULE_AI_FIELDS=true   Optional, add --ai-fields when true
- *   PIN_SCHEDULE_JITTER_MINUTES=5 Optional, random delay 0–N min before posting, default 5; set 0 to disable
+ *   PIN_SCHEDULE_JITTER_MINUTES=10 Optional, random delay 0–N min before posting, default 10; set 0 to disable
  *
  * Run: npm run schedule (keep running; use pm2 or nohup in production)
  */
@@ -28,7 +28,7 @@ if (USE_AI) args.push('--ai-fields');
 const cmd = `npm ${args.join(' ')}`;
 
 /** Max random delay in minutes before posting; 0 = no jitter. Default 5. */
-const JITTER_MINUTES = Math.max(0, parseInt(process.env.PIN_SCHEDULE_JITTER_MINUTES ?? '5', 10) || 0);
+const JITTER_MINUTES = Math.max(0, parseInt(process.env.PIN_SCHEDULE_JITTER_MINUTES ?? '10', 10) || 0);
 
 function runPostPins() {
   const time = new Date().toISOString();

@@ -4,8 +4,13 @@ name: Schedule Pinterest Pins
 
 on:
   schedule:
-    # PT 9–19 (11 runs) → UTC 17–23,0–3; one pin per hour
-    - cron: '0 0,1,2,3,17,18,19,20,21,22,23 * * *'
+    # PT 9:00–20:40, every 50 min (15 runs); PDT = UTC-7. In PST (winter) subtract 1 hr.
+    - cron: '0 16,21,2 * * *'    # 9:00, 14:00, 19:00 PT
+    - cron: '10 1,20 * * *'      # 18:10, 13:10 PT
+    - cron: '20 0,19 * * *'      # 17:20, 12:20 PT
+    - cron: '30 18,23 * * *'     # 11:30, 16:30 PT
+    - cron: '40 3,17,22 * * *'   # 20:40, 10:40, 15:40 PT
+    - cron: '50 2,16,21 * * *'   # 19:50, 9:50, 14:50 PT
   workflow_dispatch:
 
 jobs:
@@ -42,8 +47,8 @@ jobs:
           PINTEREST_TOKENS_JSON: ${{ secrets.PINTEREST_TOKENS_JSON }}
         run: echo "$PINTEREST_TOKENS_JSON" > tokens.json
 
-      - name: Random delay (0–5 min)
-        run: sleep $(( RANDOM % 301 ))
+      - name: Random delay (0–10 min)
+        run: sleep $(( RANDOM % 601 ))
 
       - name: Run post-pins
         run: |
