@@ -39,6 +39,7 @@ jobs:
           PINTEREST_REDIRECT_URI=${{ secrets.PINTEREST_REDIRECT_URI }}
           PORT=3000
           PINTEREST_USE_SANDBOX=${{ secrets.PINTEREST_USE_SANDBOX }}
+          PIN_WEBSITE_LINK=https://www.thecabination.com
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           EOF
 

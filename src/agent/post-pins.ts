@@ -39,6 +39,8 @@ export interface PinPreviewItem {
   description: string;
   alt: string;
   tags: string[];
+  /** Optional: website/pin link shown as "Website" on Pinterest */
+  link?: string;
   skip?: boolean;
 }
 
@@ -195,6 +197,7 @@ async function main() {
               title: truncate(item.title, MAX_TITLE),
               description: truncate(item.description, MAX_DESCRIPTION),
               ...(item.alt ? { alt_text: truncate(item.alt, MAX_ALT) } : {}),
+              link: item.link ?? process.env.PIN_WEBSITE_LINK ?? '',
               media,
             });
             const postedDest = await moveToAssets(absPath, 'posted');
@@ -357,6 +360,7 @@ async function main() {
           description,
           alt: altText ?? '',
           tags: currentTags,
+          link: '',
         });
         console.log(`[${i + 1}/${imagePaths.length}] Preview generated: ${name}`);
         continue;
@@ -370,6 +374,7 @@ async function main() {
           title,
           description,
           ...(altText ? { alt_text: altText } : {}),
+          link: process.env.PIN_WEBSITE_LINK ?? '',
           media,
         });
         const postedDest = await moveToAssets(filePath, 'posted');
