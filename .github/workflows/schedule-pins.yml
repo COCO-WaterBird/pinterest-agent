@@ -4,13 +4,10 @@ name: Schedule Pinterest Pins
 
 on:
   schedule:
-    # PT 9:00–20:40, every 50 min (15 runs); PDT = UTC-7. In PST (winter) subtract 1 hr.
-    - cron: '0 16,21,2 * * *'    # 9:00, 14:00, 19:00 PT
-    - cron: '10 1,20 * * *'      # 18:10, 13:10 PT
-    - cron: '20 0,19 * * *'      # 17:20, 12:20 PT
-    - cron: '30 18,23 * * *'     # 11:30, 16:30 PT
-    - cron: '40 3,17,22 * * *'   # 20:40, 10:40, 15:40 PT
-    - cron: '50 2,16,21 * * *'   # 19:50, 9:50, 14:50 PT
+    # PT 9:00–21:00, every 40 min (19 runs); PDT = UTC-7. In PST (winter) subtract 1 hr.
+    - cron: '0 0,2,4,16,18,20,22 * * *'   # :00 (PT: 9:00 ... 21:00)
+    - cron: '20 1,3,17,19,21,23 * * *'    # :20
+    - cron: '40 0,2,16,18,20,22 * * *'    # :40
   workflow_dispatch:
 
 jobs:
