@@ -6,10 +6,14 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "boards": "ts-node src/agent/post-pins.ts boards",
-    "post-pins": "ts-node src/agent/post-pins.ts post",
-    "sections": "ts-node src/agent/post-pins.ts sections",
-    "schedule": "ts-node src/agent/schedule.ts"
+    "preboards": "npm run build",
+    "boards": "node dist/agent/post-pins.js boards",
+    "prepost-pins": "npm run build",
+    "post-pins": "node dist/agent/post-pins.js post",
+    "presections": "npm run build",
+    "sections": "node dist/agent/post-pins.js sections",
+    "preschedule": "npm run build",
+    "schedule": "node dist/agent/schedule.js"
   },
   "keywords": [],
   "author": "",

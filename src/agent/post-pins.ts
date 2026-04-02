@@ -14,6 +14,7 @@ import { getAccessToken } from '../config';
 import {
   createPinterestClient,
   getBoards,
+  createBoard,
   getBoardSections,
   createPin,
   findBoardIdByHint,
@@ -67,6 +68,16 @@ function descriptionWithHashtags(description: string, tags: string[]): string {
 
 function isImageFile(filename: string): boolean {
   return IMAGE_EXT.has(path.extname(filename).toLowerCase());
+}
+
+/** Fisher–Yates shuffle (random order, not by filename) */
+function shuffleInPlace<T>(items: T[]): void {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = items[i] as T;
+    items[i] = items[j] as T;
+    items[j] = t;
+  }
 }
 
 function isAxiosError(e: unknown): e is { response?: { status?: number; data?: unknown } } {
@@ -135,10 +146,32 @@ async function main() {
   const client = createPinterestClient(accessToken);
 
   if (command === 'boards') {
+    const sub = args[1] ?? '';
+    if (sub === 'create') {
+      const nameArg = args.find((a) => a.startsWith('--name='))?.slice(7);
+      if (!nameArg?.trim()) {
+        console.error('Usage: npm run boards -- create --name="Board name"');
+        process.exit(1);
+      }
+      const descArg = args.find((a) => a.startsWith('--description='))?.slice(14);
+      const created = await createBoard(client, {
+        name: nameArg.trim(),
+        ...(descArg ? { description: descArg } : {}),
+      });
+      console.log(`Created board: ${created.id}  ${created.name}`);
+      console.log('Use --board=' + created.id + ' when posting.');
+      return;
+    }
+
     console.log('Fetching your boards...\n');
     const res = await getBoards(client);
     if (!res.items?.length) {
-      console.log('No boards found. Create at least one board on pinterest.com first.');
+      console.log(
+        'No boards in this environment (Sandbox starts empty — not the same as pinterest.com).'
+      );
+      console.log('Create one via API, then list again:');
+      console.log('  npm run boards -- create --name="Oak Kitchen Sandbox"');
+      console.log('  npm run boards');
       return;
     }
     console.log('Boards (use --board=ID when posting):');
@@ -234,6 +267,8 @@ async function main() {
     const titleArg = args.find((a) => a.startsWith('--title='))?.slice(8);
     const descArg = args.find((a) => a.startsWith('--description='))?.slice(14);
     const previewOutArg = args.find((a) => a.startsWith('--preview-out='))?.slice(14);
+    const shuffle =
+      args.includes('--shuffle') || process.env.PIN_SHUFFLE === 'true';
 
     let imagePaths: string[] = [];
 
@@ -246,6 +281,10 @@ async function main() {
       imagePaths = entries
         .filter((e) => e.isFile() && isImageFile(e.name))
         .map((e) => path.join(dir, e.name));
+    }
+    if (shuffle && imagePaths.length > 1) {
+      shuffleInPlace(imagePaths);
+      console.log('Image order: randomized (--shuffle or PIN_SHUFFLE=true)\n');
     }
     const maxCount = maxArg ? Math.max(1, parseInt(maxArg, 10) || 1) : undefined;
     if (maxCount !== undefined) imagePaths = imagePaths.slice(0, maxCount);
@@ -436,6 +475,7 @@ Usage:
     --dir=path               Image directory, default assets/to-post
     --image=path             Single image
     --max=N                  Max images this run (e.g. --max=1 for cron)
+    --shuffle                Randomize order before --max (e.g. random pick with --max=1); or set PIN_SHUFFLE=true
     --title=text             Default title when not using AI
     --description=text       Default description when not using AI
 
@@ -448,6 +488,7 @@ Examples:
   npm run post-pins -- --board=ID --ai-fields --dir=./images
   npm run post-pins -- --auto-board --preview --dir=./images
   npm run post-pins -- --from-preview
+  npm run post-pins -- --board=ID --ai-fields --dir=./images --max=1 --shuffle
 `);
 }
 

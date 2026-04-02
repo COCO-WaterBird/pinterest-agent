@@ -3,4 +3,5 @@ dist
 .env
 .DS_Store
 tokens.json
+tokens.json.bak
 assets/*

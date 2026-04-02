@@ -47,6 +47,23 @@ export async function getBoards(
 }
 
 /**
+ * Create a board (Sandbox has none by default — create one before posting)
+ * API: POST /boards
+ */
+export async function createBoard(
+  client: AxiosInstance,
+  params: { name: string; description?: string }
+): Promise<Board> {
+  const { data } = await client.post<Board>('/boards', {
+    name: params.name,
+    ...(params.description != null && params.description !== ''
+      ? { description: params.description }
+      : {}),
+  });
+  return data;
+}
+
+/**
  * Find a board by name/description hint (case-insensitive)
  * e.g. hint="travel" matches a board whose name or description contains "travel"
  */
