@@ -4,12 +4,13 @@ name: Schedule Pinterest Pins
 
 on:
   schedule:
-    # GitHub cron is UTC only. These approximate 09:00–21:00 US Pacific (PDT, UTC-7):
-    #   UTC 16:00–23:30 + 00:00–03:30 + 04:00 ≈ PT 09:00–21:00 every 30 min + 21:00.
-    # During PST (UTC-8), runs skew ~1h earlier in PT; edit hours (+1) Nov–Mar if needed.
-    - cron: '*/30 16-23 * * *'
-    - cron: '*/30 0-3 * * *'
-    - cron: '0 4 * * *'
+    # UTC only. These approximate 09:00–21:45 US Pacific (PDT): ~every 15 min in that window.
+    # There are NO runs ~21:45 PT → ~09:00 PT (night) — that gap is expected, not a bug.
+    # GitHub may delay jobs minutes+ under load (docs); not exact wall-clock spacing.
+    # For 24/7 UTC scheduling instead, replace the three lines with: - cron: '*/15 * * * *'
+    - cron: '*/15 16-23 * * *'
+    - cron: '*/15 0-3 * * *'
+    - cron: '*/15 4 * * *'
   workflow_dispatch:
 
 jobs:
@@ -47,8 +48,9 @@ jobs:
           PINTEREST_TOKENS_JSON: ${{ secrets.PINTEREST_TOKENS_JSON }}
         run: echo "$PINTEREST_TOKENS_JSON" > tokens.json
 
-      - name: Random delay (0–5 min)
-        run: sleep $(( RANDOM % 301 ))
+      # Short jitter only; long delays are mostly from GitHub queue + cron window above.
+      - name: Random delay (0–2 min)
+        run: sleep $(( RANDOM % 121 ))
 
       - name: Run post-pins
         run: |
