@@ -4,13 +4,14 @@ name: Schedule Pinterest Pins
 
 on:
   schedule:
-    # UTC only. These approximate 09:00–21:45 US Pacific (PDT): ~every 15 min in that window.
-    # There are NO runs ~21:45 PT → ~09:00 PT (night) — that gap is expected, not a bug.
-    # GitHub may delay jobs minutes+ under load (docs); not exact wall-clock spacing.
-    # For 24/7 UTC scheduling instead, replace the three lines with: - cron: '*/15 * * * *'
-    - cron: '*/15 16-23 * * *'
-    - cron: '*/15 0-3 * * *'
-    - cron: '*/15 4 * * *'
+    # UTC only. Approx. US Pacific (PDT, UTC-7) 07:00–23:45, every 15 min:
+    #   UTC 14–23 + UTC 0–5 + UTC hour 6 (6:00–6:45) → PT 7am–11:45pm.
+    # Quiet ~11:45pm–7am PT. PST (winter) shifts ~1h; adjust hours if needed.
+    # GitHub may delay scheduled runs under load.
+    # 24/7 example: - cron: '*/15 * * * *'
+    - cron: '*/15 14-23 * * *'
+    - cron: '*/15 0-5 * * *'
+    - cron: '*/15 6 * * *'
   workflow_dispatch:
 
 jobs:

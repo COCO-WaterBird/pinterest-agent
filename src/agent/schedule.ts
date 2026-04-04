@@ -3,10 +3,9 @@
  *
  * .env config:
  *   PIN_BOARD_ID=board_id          Required, target board to post to
- *   PIN_SCHEDULE_CRON=...          Optional; default = every 30 min, 09:00–21:00 America/Los_Angeles
+ *   PIN_SCHEDULE_CRON=...          Optional; default every 15 min, 07:00–23:45 America/Los_Angeles
  *   PIN_SCHEDULE_TZ=America/Los_Angeles  Optional IANA tz for cron (default US Pacific)
  *   PIN_SCHEDULE_AI_FIELDS=true   Optional, add --ai-fields when true
- *   PIN_SCHEDULE_CRON_21=0 21 * * *  Optional second cron when using defaults (21:00 slot only)
  *   PIN_SCHEDULE_JITTER_MINUTES=5 Optional, random delay 0–N min before posting, default 5; set 0 to disable
  *   PIN_SHUFFLE=true            Optional; pass --shuffle to post-pins (random order before --max)
  *
@@ -17,11 +16,9 @@ import cron from 'node-cron';
 import { exec } from 'child_process';
 
 const BOARD_ID = process.env.PIN_BOARD_ID;
-/** Every 30 min from 09:00–20:30 PT, plus 21:00 (no 21:30). */
-const DEFAULT_CRON_MAIN = '*/30 9-20 * * *';
-const DEFAULT_CRON_21 = '0 21 * * *';
+/** Every 15 min 07:00–23:45 (America/Los_Angeles). Quiet ~23:45–07:00. */
+const DEFAULT_CRON = '*/15 7-23 * * *';
 const CRON_EXPR = process.env.PIN_SCHEDULE_CRON?.trim();
-const CRON_EXPR_21 = process.env.PIN_SCHEDULE_CRON_21?.trim();
 const SCHEDULE_TZ = process.env.PIN_SCHEDULE_TZ ?? 'America/Los_Angeles';
 const USE_AI = process.env.PIN_SCHEDULE_AI_FIELDS === 'true';
 
@@ -66,35 +63,18 @@ const cronOpts = { timezone: SCHEDULE_TZ };
 
 console.log('Scheduled Pin posting started');
 console.log('  Board ID:', BOARD_ID);
-console.log(
-  '  cron:',
-  CRON_EXPR ?? `${DEFAULT_CRON_MAIN} + ${CRON_EXPR_21 ?? DEFAULT_CRON_21}`,
-  `(${SCHEDULE_TZ})`
-);
+console.log('  cron:', CRON_EXPR ?? DEFAULT_CRON, `(${SCHEDULE_TZ})`);
 console.log('  AI copy:', USE_AI ? 'yes' : 'no');
 console.log('  Post time jitter:', JITTER_MINUTES > 0 ? `0–${JITTER_MINUTES} min` : 'none');
 console.log('  Press Ctrl+C to stop\n');
 
-if (CRON_EXPR) {
-  if (!cron.validate(CRON_EXPR)) {
-    console.error('Invalid PIN_SCHEDULE_CRON:', CRON_EXPR);
-    console.error('Examples: */30 9-20 * * * = every 30 min 09:00–20:30 in PIN_SCHEDULE_TZ');
-    process.exit(1);
-  }
-  cron.schedule(CRON_EXPR, runPostPins, cronOpts);
-} else {
-  if (!cron.validate(DEFAULT_CRON_MAIN) || !cron.validate(DEFAULT_CRON_21)) {
-    console.error('Invalid built-in default cron');
-    process.exit(1);
-  }
-  cron.schedule(DEFAULT_CRON_MAIN, runPostPins, cronOpts);
-  const second = CRON_EXPR_21 ?? DEFAULT_CRON_21;
-  if (!cron.validate(second)) {
-    console.error('Invalid PIN_SCHEDULE_CRON_21:', second);
-    process.exit(1);
-  }
-  cron.schedule(second, runPostPins, cronOpts);
+const effectiveCron = CRON_EXPR ?? DEFAULT_CRON;
+if (!cron.validate(effectiveCron)) {
+  console.error('Invalid PIN_SCHEDULE_CRON:', effectiveCron);
+  console.error('Example: use PIN_SCHEDULE_TZ=America/Los_Angeles and a 5-field cron.');
+  process.exit(1);
 }
+cron.schedule(effectiveCron, runPostPins, cronOpts);
 
 if (process.env.PIN_SCHEDULE_RUN_NOW === 'true') {
   runPostPins();
