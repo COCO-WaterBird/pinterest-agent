@@ -4,14 +4,12 @@ name: Schedule Pinterest Pins
 
 on:
   schedule:
-    # UTC only. Approx. US Pacific (PDT, UTC-7) 07:00–23:45, every 15 min:
-    #   UTC 14–23 + UTC 0–5 + UTC hour 6 (6:00–6:45) → PT 7am–11:45pm.
-    # Quiet ~11:45pm–7am PT. PST (winter) shifts ~1h; adjust hours if needed.
-    # GitHub may delay scheduled runs under load.
-    # 24/7 example: - cron: '*/15 * * * *'
-    - cron: '*/15 14-23 * * *'
-    - cron: '*/15 0-5 * * *'
-    - cron: '*/15 6 * * *'
+    # UTC only. Approx. US Pacific (PDT, UTC-7): 07:05–00:05 PT, every 15 min.
+    # 07:05–23:50 PT => UTC 14:05–06:50 (minutes 5,20,35,50); plus 00:05 PT => UTC 07:05.
+    # PST (winter) shifts ~1h; adjust UTC hours if needed.
+    - cron: '5,20,35,50 14-23 * * *'
+    - cron: '5,20,35,50 0-6 * * *'
+    - cron: '5 7 * * *'
   workflow_dispatch:
 
 jobs:
@@ -48,10 +46,6 @@ jobs:
         env:
           PINTEREST_TOKENS_JSON: ${{ secrets.PINTEREST_TOKENS_JSON }}
         run: echo "$PINTEREST_TOKENS_JSON" > tokens.json
-
-      # Short jitter only; long delays are mostly from GitHub queue + cron window above.
-      - name: Random delay (0–2 min)
-        run: sleep $(( RANDOM % 121 ))
 
       - name: Run post-pins
         run: |
